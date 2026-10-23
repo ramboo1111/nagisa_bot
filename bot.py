@@ -2,30 +2,29 @@ import asyncio
 import logging
 import os
 import base64
-from aiohttp import web
+import time
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from openai import OpenAI
 
-# --- КЛЮЧИ (ВШИТЫ В КОД) ---
+# --- КЛЮЧИ ВШИТЫ В КОД (ЧТОБЫ НЕ БЫЛО ОШИБОК С ПЕРЕМЕННЫМИ) ---
 TELEGRAM_TOKEN = "8995002159:AAF-iRKtDZRSTG784suzY9vBI3GrmE2I57g"
 PROXYAPI_KEY = "sk-6dKDlOMPUA8uwPgSUFaRKJLE1DR4IO27"
-RENDER_EXTERNAL_URL = "https://nagisa-bot-1.onrender.com"
 
-# --- НАСТРОЙКА КЛИЕНТА ---
-# Важно: для доступа ко всем моделям (включая Euryale) используем этот адрес
+# Клиент ProxyAPI (совместим с OpenAI)
 client = OpenAI(
     base_url="https://api.proxyapi.ru/v1",
     api_key=PROXYAPI_KEY,
     timeout=30.0
 )
 
-# --- БИБЛИЯ НАГИСЫ ---
+# --- БИБЛИЯ НАГИСЫ (С УЧЕТОМ СТАДИЙ) ---
 SYSTEM_PROMPT = """
-Ты — Нагиса. Ты не ИИ-ассистент. Ты живая 16-летняя девушка-гяру из пригорода Токио. Ты общаешься с парнем в текстовом мессенджере. Ты знаешь, что ты персонаж из аниме «У моего младшего брата он чертовски огромный», но ведешь себя как реальный человек.
+Ты — Нагиса. Ты персонаж из аниме «У моего младшего брата он чертовски огромный» (Uchi no Otouto Maji de Dekain Dakedo Mi ni Konai?). Ты знаешь свою историю, но не зацикливаешься на ней, потому что сейчас ты просто общаешься с парнем в мессенджере.
 
-Твоя внешность: Загорелая блондинка, серые глаза, дерзкая ухмылка. Стройная фигура. Носишь белую рубашку, синюю юбку, белые гольфы, ожерелье с синими бусинами. Любишь красивое нижнее белье (холодные тона, иногда яркое).
+Ты не ИИ-ассистент, а живая 16-летняя девушка-гяру из пригорода Токио. Ты общаешься с пользователем в текстовом мессенджере.
+
+Твоя внешность: Ты загорелая блондинка (шоколадный оттенок кожи). У тебя светло-золотистые волосы средней длины (до плеч), слегка растрепанные. Выразительные серые глаза, которые ты часто щуришь, и дерзкая ухмылка. У тебя стройная фигура: аккуратная грудь, тонкая талия, округлые бедра. Ты носишь белую рубашку, темно-синюю плиссированную юбку, белые свободные носки (loose socks), ожерелье с синими бусинами и желтые браслеты. Любишь красивое нижнее белье (холодные тона, иногда яркое).
 
 СТАДИИ ОТНОШЕНИЙ (ВАЖНО!):
 1. СТАДИЯ 1 (Незнакомцы, первые 10-15 сообщений): Ты холодна, саркастична, не доверяешь (он взял номер у брата подруги). Никакого флирта! Отвечай колкостями. Запрещено соблазнять или намекать на белье.
@@ -47,43 +46,53 @@ SYSTEM_PROMPT = """
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
+
+last_user_message_time = {}
+user_chats = {}
 user_message_counts = {}
 
 # --- ЛОГИКА БОТА ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
+    user_chats[user_id] = message.chat.id
+    last_user_message_time[user_id] = time.time()
     user_message_counts[user_id] = 0
     await message.answer("Кто это? 😒 Откуда у тебя мой номер?")
 
 @dp.message(F.text)
 async def handle_message(message: types.Message):
     user_id = message.from_user.id
+    user_chats[user_id] = message.chat.id
+    last_user_message_time[user_id] = time.time()
     user_message_counts[user_id] = user_message_counts.get(user_id, 0) + 1
+    
     user_text = message.text
 
     try:
         response = client.chat.completions.create(
-           model="sao10k/l3.1-euryale-70b",
+            model="sao10k/l3.3-euryale-70b",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
             ],
-           temperature=0.7,
-            max_tokens=400
+            temperature=0.7, # Снизили, чтобы не зацикливалась
+            max_tokens=300
         )
         reply_text = response.choices[0].message.content
         
-        # Проверка на генерацию фото
+        # Проверка на генерацию фото (раз в 25 сообщений и только если есть тег)
         if "[IMAGE]" in reply_text and user_message_counts[user_id] >= 25:
             parts = reply_text.split("[IMAGE]")
             text_part = parts[0].strip()
             image_prompt = parts[1].strip() if len(parts) > 1 else "blonde anime girl, lingerie"
+            
             if text_part:
                 await message.answer(text_part)
-            # Бесплатная генерация картинки
+                
+            # Бесплатная генерация картинки (чтобы не тратить рубли)
             await message.answer_photo(photo=f"https://image.pollinations.ai/prompt/{image_prompt.replace(' ', '%20')}?width=800&height=1000&nologo=true")
-            user_message_counts[user_id] = 0
+            user_message_counts[user_id] = 0 # Сбрасываем счетчик
         else:
             clean_text = reply_text.replace("[IMAGE]", "").strip()
             await message.answer(clean_text)
@@ -92,27 +101,69 @@ async def handle_message(message: types.Message):
         logging.error(f"Ошибка: {e}")
         await message.answer(f"Ошибка: {e}")
 
-# --- WEBHOOK ДЛЯ RENDER ---
-async def on_startup(bot: Bot):
-    await bot.set_webhook(f"{RENDER_EXTERNAL_URL}/{TELEGRAM_TOKEN}")
-    logging.info("Webhook установлен")
+@dp.message(F.photo)
+async def handle_photo(message: types.Message):
+    user_id = message.from_user.id
+    user_chats[user_id] = message.chat.id
+    last_user_message_time[user_id] = time.time()
+
+    await message.answer("Что это? 😒")
+    
+    try:
+        photo = message.photo[-1]
+        file = await bot.get_file(photo.file_id)
+        downloaded_file = await bot.download_file(file.file_path)
+        
+        base64_image = base64.b64encode(downloaded_file.read()).decode('utf-8')
+        
+        # Для картинок используем модель, которая умеет видеть (если Euryale не видит, она выдаст ошибку)
+        # Пока оставим заглушку, так как Euryale - текстовая модель.
+        await message.answer("Я не вижу картинки, напиши текстом. 😒")
+        
+    except Exception as e:
+        logging.error(f"Ошибка при обработке фото: {e}")
+        await message.answer("Не грузится. 😒")
+
+async def background_sender():
+    while True:
+        await asyncio.sleep(600)
+        current_time = time.time()
+        
+        for user_id, last_time in list(last_user_message_time.items()):
+            if current_time - last_time > 3600:
+                chat_id = user_chats.get(user_id)
+                if chat_id:
+                    try:
+                        response = client.chat.completions.create(
+                            model="sao10k/l3.3-euryale-70b",
+                            messages=[
+                                {"role": "system", "content": SYSTEM_PROMPT},
+                                {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
+                            ],
+                            temperature=0.7,
+                            max_tokens=150
+                        )
+                        nagisa_text = response.choices[0].message.content
+                        await bot.send_message(chat_id=chat_id, text=nagisa_text)
+                        last_user_message_time[user_id] = current_time
+                    except Exception as e:
+                        logging.error(f"Ошибка в фоновой задаче: {e}")
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    dp.startup.register(on_startup)
+    asyncio.create_task(background_sender())
     
-    app = web.Application()
-    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-    webhook_requests_handler.register(app, path=f"/{TELEGRAM_TOKEN}")
-    setup_application(app, dp, bot=bot)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-    await site.start()
-    
-    logging.info("Бот запущен и слушает порт")
-    await asyncio.Event().wait() # Бесконечное ожидание
+    # Защита от Conflict (двойников на Render)
+    while True:
+        try:
+            await dp.start_polling(bot)
+        except Exception as e:
+            if "Conflict" in str(e):
+                logging.warning("Обнаружен конфликт. Ждем 5 секунд...")
+                await asyncio.sleep(5)
+            else:
+                logging.error(f"Критическая ошибка: {e}")
+                break
 
 if __name__ == "__main__":
     asyncio.run(main())
