@@ -8,17 +8,20 @@ from aiogram.filters import Command
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from openai import OpenAI
 
-# Ключи вшиты (как ты просил)
+# --- КЛЮЧИ (ВШИТЫ В КОД) ---
 TELEGRAM_TOKEN = "8995002159:AAF-iRKtDZRSTG784suzY9vBI3GrmE2I57g"
 PROXYAPI_KEY = "sk-6dKDlOMPUA8uwPgSUFaRKJLE1DR4IO27"
-RENDER_EXTERNAL_URL = "https://nagisa-bot-1.onrender.com" # Твой URL
+RENDER_EXTERNAL_URL = "https://nagisa-bot-1.onrender.com"
 
+# --- НАСТРОЙКА КЛИЕНТА ---
+# Важно: для доступа ко всем моделям (включая Euryale) используем этот адрес
 client = OpenAI(
-    base_url="https://api.proxyapi.ru/v1", # Правильный адрес для всех моделей
+    base_url="https://api.proxyapi.ru/v1",
     api_key=PROXYAPI_KEY,
     timeout=30.0
 )
 
+# --- БИБЛИЯ НАГИСЫ ---
 SYSTEM_PROMPT = """
 Ты — Нагиса. Ты не ИИ-ассистент. Ты живая 16-летняя девушка-гяру из пригорода Токио. Ты общаешься с парнем в текстовом мессенджере. Ты знаешь, что ты персонаж из аниме «У моего младшего брата он чертовски огромный», но ведешь себя как реальный человек.
 
@@ -46,6 +49,7 @@ bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 user_message_counts = {}
 
+# --- ЛОГИКА БОТА ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
@@ -60,22 +64,24 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="sao10k/l3.3-euryale-70b",
+            model="sao10k/l3.3-euryale-70b", # Наша любимая Euryale
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
             ],
             temperature=0.85,
-            max_tokens=300
+            max_tokens=400
         )
         reply_text = response.choices[0].message.content
         
+        # Проверка на генерацию фото
         if "[IMAGE]" in reply_text and user_message_counts[user_id] >= 25:
             parts = reply_text.split("[IMAGE]")
             text_part = parts[0].strip()
             image_prompt = parts[1].strip() if len(parts) > 1 else "blonde anime girl, lingerie"
             if text_part:
                 await message.answer(text_part)
+            # Бесплатная генерация картинки
             await message.answer_photo(photo=f"https://image.pollinations.ai/prompt/{image_prompt.replace(' ', '%20')}?width=800&height=1000&nologo=true")
             user_message_counts[user_id] = 0
         else:
@@ -86,6 +92,7 @@ async def handle_message(message: types.Message):
         logging.error(f"Ошибка: {e}")
         await message.answer(f"Ошибка: {e}")
 
+# --- WEBHOOK ДЛЯ RENDER ---
 async def on_startup(bot: Bot):
     await bot.set_webhook(f"{RENDER_EXTERNAL_URL}/{TELEGRAM_TOKEN}")
     logging.info("Webhook установлен")
@@ -104,6 +111,7 @@ async def main():
     site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
     await site.start()
     
+    logging.info("Бот запущен и слушает порт")
     await asyncio.Event().wait() # Бесконечное ожидание
 
 if __name__ == "__main__":
