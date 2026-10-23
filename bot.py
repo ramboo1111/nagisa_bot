@@ -16,7 +16,8 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY
+    api_key=OPENROUTER_API_KEY,
+    timeout=30.0  # Ждем ответа до 30 секунд, чтобы модель не обрывалась
 )
 
 SYSTEM_PROMPT = """
@@ -75,7 +76,7 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="openrouter/free",
+            model="google/gemma-4-31b-it:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -120,7 +121,7 @@ async def handle_photo(message: types.Message):
         image_description = response.choices[0].message.content
         
         nagisa_response = client.chat.completions.create(
-           model="openrouter/free",
+          model="google/gemma-4-31b-it:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Пользователь прислал мем. Вот его описание: {image_description}. Оцени его (скорее всего, тебе не понравится) и ответь холодно."}
@@ -146,7 +147,7 @@ async def background_sender():
                 if chat_id:
                     try:
                         response = client.chat.completions.create(
-                            model="openrouter/free",
+                            model="google/gemma-4-31b-it:free",
                             messages=[
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
