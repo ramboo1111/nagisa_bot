@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("8995002159:AAF-iRKtDZRSTG784suzY9vBI3GrmE2I57g")
-PROXYAPI_KEY = os.getenv("sk-6dKDlOMPUA8uwPgSUFaRKJLE1DR4IO27")
+PROXYAPI_KEY = "sk-6dKDlOMPUA8uwPgSUFaRKJLE1DR4IO27"
 
 # Клиент ProxyAPI (совместим с OpenAI)
 client = OpenAI(
