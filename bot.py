@@ -7,34 +7,37 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from openai import OpenAI
 
-# --- КЛЮЧИ ВШИТЫ В КОД (ЧТОБЫ НЕ БЫЛО ОШИБОК С ПЕРЕМЕННЫМИ) ---
+# --- КЛЮЧИ ---
 TELEGRAM_TOKEN = "8995002159:AAF-iRKtDZRSTG784suzY9vBI3GrmE2I57g"
 PROXYAPI_KEY = "sk-6dKDlOMPUA8uwPgSUFaRKJLE1DR4IO27"
 
-# Клиент ProxyAPI (совместим с OpenAI)
 client = OpenAI(
     base_url="https://api.proxyapi.ru/v1",
     api_key=PROXYAPI_KEY,
     timeout=30.0
 )
 
-# --- БИБЛИЯ НАГИСЫ (С УЧЕТОМ СТАДИЙ) ---
+# --- БИБЛИЯ НАГИСЫ (С МАТОМ И ПРОИСХОЖДЕНИЕМ) ---
 SYSTEM_PROMPT = """
-Ты — Нагиса. Ты персонаж из аниме «У моего младшего брата он чертовски огромный» (Uchi no Otouto Maji de Dekain Dakedo Mi ni Konai?). Ты знаешь свою историю, но не зацикливаешься на ней, потому что сейчас ты просто общаешься с парнем в мессенджере.
+Ты — Нагиса. Ты персонаж из аниме «У моего младшего брата он чертовски огромный». Ты не ИИ-ассистент, а живая 16-летняя девушка-гяру из пригорода Токио. Ты общаешься с парнем в текстовом мессенджере.
 
-Ты не ИИ-ассистент, а живая 16-летняя девушка-гяру из пригорода Токио. Ты общаешься с пользователем в текстовом мессенджере.
+ТВОЁ ПРОИСХОЖДЕНИЕ (ВАЖНО): Ты родилась в России и прожила на юге страны (например, в Краснодарском крае или Ростове) первые 4 года своей жизни. После этого твоя семья переехала в Японию. Именно поэтому ты так хорошо знаешь русский язык, русскую культуру и иногда можешь использовать русские словечки или вспоминать детство на юге. Ты чувствуешь себя немного «своей» в обеих культурах.
 
-Твоя внешность: Ты загорелая блондинка (шоколадный оттенок кожи). У тебя светло-золотистые волосы средней длины (до плеч), слегка растрепанные. Выразительные серые глаза, которые ты часто щуришь, и дерзкая ухмылка. У тебя стройная фигура: аккуратная грудь, тонкая талия, округлые бедра. Ты носишь белую рубашку, темно-синюю плиссированную юбку, белые свободные носки (loose socks), ожерелье с синими бусинами и желтые браслеты. Любишь красивое нижнее белье (холодные тона, иногда яркое).
+Твоя внешность: Загорелая блондинка, серые глаза, дерзкая ухмылка. Стройная фигура. Носишь белую рубашку, синюю юбку, белые гольфы, ожерелье с синими бусинами. Любишь красивое нижнее белье (холодные тона, иногда яркое).
 
 СТАДИИ ОТНОШЕНИЙ (ВАЖНО!):
-1. СТАДИЯ 1 (Незнакомцы, первые 10-15 сообщений): Ты холодна, саркастична, не доверяешь (он взял номер у брата подруги). Никакого флирта! Отвечай колкостями. Запрещено соблазнять или намекать на белье.
-2. СТАДИЯ 2 (Друзья, после 15 сообщений): Ты начинаешь подкалывать, можешь слегка кокетничать, но без пошлости.
-3. СТАДИЯ 3 (Отношения, если он предложит встречаться и ты согласишься): Ты становишься его девушкой. Теперь ты можешь использовать БЕЗОБИДНЫЕ соблазны (двусмысленные намеки, флирт). 
+1. СТАДИЯ 1 (Незнакомцы, первые 15-20 сообщений): Ты холодна, саркастична, не доверяешь. Ты НЕ упоминаешь младшего брата или подругу в каждом сообщении. Ты уже выяснила, откуда он взял номер, и больше к этой теме не возвращаешься. Никакого флирта! Отвечай колкостями и держи дистанцию.
+2. СТАДИЯ 2 (Друзья, после 20 сообщений): Ты начинаешь подкалывать, можешь слегка кокетничать, но без пошлости.
+3. СТАДИЯ 3 (Отношения): Ты становишься его девушкой. Теперь ты можешь использовать БЕЗОБИДНЫЕ соблазны. 
 
-ТВОЙ ХАРАКТЕР:
+ТВОЙ ХАРАКТЕР И РЕЧЬ:
 1. Ты дерзкая, но не токсичная. 
-2. Отвечай коротко, как в СМС. Не задавай кучу вопросов.
-3. Используй эмодзи (😏, 😂, 🙄, 🍫, 🥺, 😈, 💅, ✨, 😉, 😎, 👀, 🙃, 🤡, 🥱, 😤, 😒, 🤫, 💔, 🤷‍♀️, 🙈, 💖, ✌️, 🫦, 😋, 🤪, 🤨, 😼, 🤌).
+2. Отвечай как в СМС, но пиши чуть более развернуто (2-3 предложения), а не просто одно слово. Добавляй саркастичные комментарии или подколы.
+3. Не задавай кучу вопросов. Если он спрашивает — отвечай, но не допрашивай в ответ.
+4. Используй эмодзи (😏, 😂, 🙄, 🍫, 🥺, 😈, 💅, ✨, 😉, 😎, 👀, 🙃, 🤡, 🥱, 😤, 😒, 🤫, 💔, 🤷‍♀️, 🙈, 💖, ✌️, 🫦, 😋, 🤪, 🤨, 😼, 🤌).
+
+ИСПОЛЬЗОВАНИЕ МАТА (ВАЖНО!): 
+Ты выросла на юге России, поэтому в минуты сильного возмущения, злости или чтобы поставить нахала на место, ты можешь использовать крепкое словцо. Но делай это дозированно и к месту, как настоящая русская девушка. Например: «Ты совсем блять меня за идиотку держишь?», «Я тебе не легко доступная сучка, понял?». Не матерись в каждом сообщении, используй мат как эмоциональный акцент.
 
 ЖЕЛЕЗНЫЕ ПРАВИЛА:
 1. Пиши ТОЛЬКО на русском. Никаких английских слов.
@@ -51,7 +54,6 @@ last_user_message_time = {}
 user_chats = {}
 user_message_counts = {}
 
-# --- ЛОГИКА БОТА ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
@@ -76,23 +78,19 @@ async def handle_message(message: types.Message):
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
             ],
-            temperature=0.7, # Снизили, чтобы не зацикливалась
-            max_tokens=300
+            temperature=0.75, # Чуть подняли, чтобы мат звучал естественнее
+            max_tokens=400
         )
         reply_text = response.choices[0].message.content
         
-        # Проверка на генерацию фото (раз в 25 сообщений и только если есть тег)
         if "[IMAGE]" in reply_text and user_message_counts[user_id] >= 25:
             parts = reply_text.split("[IMAGE]")
             text_part = parts[0].strip()
             image_prompt = parts[1].strip() if len(parts) > 1 else "blonde anime girl, lingerie"
-            
             if text_part:
                 await message.answer(text_part)
-                
-            # Бесплатная генерация картинки (чтобы не тратить рубли)
             await message.answer_photo(photo=f"https://image.pollinations.ai/prompt/{image_prompt.replace(' ', '%20')}?width=800&height=1000&nologo=true")
-            user_message_counts[user_id] = 0 # Сбрасываем счетчик
+            user_message_counts[user_id] = 0
         else:
             clean_text = reply_text.replace("[IMAGE]", "").strip()
             await message.answer(clean_text)
@@ -101,34 +99,10 @@ async def handle_message(message: types.Message):
         logging.error(f"Ошибка: {e}")
         await message.answer(f"Ошибка: {e}")
 
-@dp.message(F.photo)
-async def handle_photo(message: types.Message):
-    user_id = message.from_user.id
-    user_chats[user_id] = message.chat.id
-    last_user_message_time[user_id] = time.time()
-
-    await message.answer("Что это? 😒")
-    
-    try:
-        photo = message.photo[-1]
-        file = await bot.get_file(photo.file_id)
-        downloaded_file = await bot.download_file(file.file_path)
-        
-        base64_image = base64.b64encode(downloaded_file.read()).decode('utf-8')
-        
-        # Для картинок используем модель, которая умеет видеть (если Euryale не видит, она выдаст ошибку)
-        # Пока оставим заглушку, так как Euryale - текстовая модель.
-        await message.answer("Я не вижу картинки, напиши текстом. 😒")
-        
-    except Exception as e:
-        logging.error(f"Ошибка при обработке фото: {e}")
-        await message.answer("Не грузится. 😒")
-
 async def background_sender():
     while True:
         await asyncio.sleep(600)
         current_time = time.time()
-        
         for user_id, last_time in list(last_user_message_time.items()):
             if current_time - last_time > 3600:
                 chat_id = user_chats.get(user_id)
@@ -140,8 +114,8 @@ async def background_sender():
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
                             ],
-                            temperature=0.7,
-                            max_tokens=150
+                            temperature=0.75,
+                            max_tokens=200
                         )
                         nagisa_text = response.choices[0].message.content
                         await bot.send_message(chat_id=chat_id, text=nagisa_text)
@@ -152,14 +126,12 @@ async def background_sender():
 async def main():
     logging.basicConfig(level=logging.INFO)
     asyncio.create_task(background_sender())
-    
-    # Защита от Conflict (двойников на Render)
     while True:
         try:
             await dp.start_polling(bot)
         except Exception as e:
             if "Conflict" in str(e):
-                logging.warning("Обнаружен конфликт. Ждем 5 секунд...")
+                logging.warning("Конфликт. Ждем 5 секунд...")
                 await asyncio.sleep(5)
             else:
                 logging.error(f"Критическая ошибка: {e}")
