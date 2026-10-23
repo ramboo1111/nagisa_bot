@@ -79,7 +79,7 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="openrouter/free",
+            model="nvidia/nemotron-3.5-lightning:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -111,7 +111,7 @@ async def handle_photo(message: types.Message):
         
         # Зрячая модель для описания (оставляем Nemotron, если он работает, или можно заменить на другую)
         response = client.chat.completions.create(
-            model="openrouter/free",
+           мmodel="nvidia/nemotron-3.5-lightning:free",
             messages=[
                 {"role": "system", "content": "Опиши эту картинку или мем кратко."},
                 {"role": "user", "content": [
@@ -125,7 +125,7 @@ async def handle_photo(message: types.Message):
         image_description = response.choices[0].message.content
         
         nagisa_response = client.chat.completions.create(
-           model="openrouter/free",
+           model="nvidia/nemotron-3.5-lightning:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Пользователь прислал мем. Вот его описание: {image_description}. Оцени его (скорее всего, тебе не понравится) и ответь холодно."}
