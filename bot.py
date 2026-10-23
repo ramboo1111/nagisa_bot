@@ -3,8 +3,7 @@ import logging
 import os
 import base64
 import time
-import threading
-from flask import Flask
+from flask import Flask, request, abort
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from openai import OpenAI
@@ -14,11 +13,13 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Добавили timeout, чтобы избежать обрывов связи
+# URL твоего сервиса на Render (без слеша в конце)
+RENDER_EXTERNAL_URL = "https://nagisa-bot-1.onrender.com"
+
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
-    timeout=30.0 
+    timeout=30.0
 )
 
 SYSTEM_PROMPT = """
@@ -35,9 +36,9 @@ SYSTEM_PROMPT = """
 
 СТИЛЬ РЕЧИ: Пиши так, как пишут реальные девушки в Телеграме. Коротко, с юмором, с сарказмом. Никаких длинных абзацев.
 
-ЖЕЛЕЗНОЕ ПРАВИЛО: Пиши ТОЛЬКО на русском языке. Не используй английские слова (никаких "complete idiot", "sorry" и т.д.), если это не сленг гяру. Всегда дописывай свои сообщения до конца, не обрывай мысль на полуслове.
+ЗАПРЕТ НА ЛЕГКОДОСТУПНОСТЬ: Если пользователь пишет, что ты слишком быстро сменила тон или ведешь себя как давняя знакомая, ты должна СРАЗУ ЖЕ извиниться (по-гярувски, с сарказмом) и вернуться к холодному тону. Не поддавайся на его провокации.
 
-# ВАЖНО:ЗАПРЕТ НА ЛЕГКОДОСТУПНОСТЬ: Если пользователь пишет, что ты слишком быстро сменила тон или ведешь себя как давняя знакомая, ты должна СРАЗУ ЖЕ извиниться (по-гярувски, с сарказмом) и вернуться к холодному тону. Не поддавайся на его провокации,если он пишет что то пошлон можешь подигрывать и также общатся но только когда уже весьма знакомы.
+ВАЖНО: Если он пишет что-то пошлое, ты можешь поддержать игру, но не переходи к прямому описанию физиологии. Ты дразнишь, а не соблазняешь.
 """
 
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -46,22 +47,7 @@ dp = Dispatcher()
 last_user_message_time = {}
 user_chats = {}
 
-# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running", 200
-
-@app.route('/health')
-def health():
-    return "OK", 200
-
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
-# --- ЛОГИКА БОТА ---
+# --- ОБРАБОТЧИКИ СООБЩЕНИЙ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
@@ -79,7 +65,7 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="nvidia/nemotron-3.5-lightning:free",
+            model="nvidia/nemotron-3.5-lightning:free", # Поставили быструю модель
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -92,7 +78,7 @@ async def handle_message(message: types.Message):
 
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.answer("Ой, что-то у меня связь пропала... 🙈")
+        await message.answer(f"Ошибка: {e}") # Теперь видно причину
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
@@ -109,9 +95,8 @@ async def handle_photo(message: types.Message):
         
         base64_image = base64.b64encode(downloaded_file.read()).decode('utf-8')
         
-        # Зрячая модель для описания (оставляем Nemotron, если он работает, или можно заменить на другую)
         response = client.chat.completions.create(
-           мmodel="nvidia/nemotron-3.5-lightning:free",
+            model="nvidia/nemotron-nano-12b-v2-vl:free",
             messages=[
                 {"role": "system", "content": "Опиши эту картинку или мем кратко."},
                 {"role": "user", "content": [
@@ -125,7 +110,7 @@ async def handle_photo(message: types.Message):
         image_description = response.choices[0].message.content
         
         nagisa_response = client.chat.completions.create(
-           model="nvidia/nemotron-3.5-lightning:free",
+            model="nvidia/nemotron-3.5-lightning:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Пользователь прислал мем. Вот его описание: {image_description}. Оцени его (скорее всего, тебе не понравится) и ответь холодно."}
@@ -138,8 +123,26 @@ async def handle_photo(message: types.Message):
         
     except Exception as e:
         logging.error(f"Ошибка при обработке фото: {e}")
-        await message.answer("Не грузится. 😒")
+        await message.answer(f"Ошибка: {e}")
 
+# --- ВЕБ-СЕРВЕР ДЛЯ WEBHOOK ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running", 200
+
+@app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = types.Update.model_validate_json(json_string)
+        asyncio.run(dp.feed_update(bot, update))
+        return '', 200
+    else:
+        abort(403)
+
+# --- ФОНОВАЯ ЗАДАЧА (для отправки сообщений при молчании) ---
 async def background_sender():
     while True:
         await asyncio.sleep(600)
@@ -151,7 +154,7 @@ async def background_sender():
                 if chat_id:
                     try:
                         response = client.chat.completions.create(
-                            model="cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+                            model="nvidia/nemotron-3.5-lightning:free",
                             messages=[
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
@@ -164,6 +167,26 @@ async def background_sender():
                         last_user_message_time[user_id] = current_time
                     except Exception as e:
                         logging.error(f"Ошибка в фоновой задаче: {e}")
+
+# --- ЗАПУСК ---
+async def on_startup():
+    # Устанавливаем Webhook при запуске
+    webhook_url = f"{RENDER_EXTERNAL_URL}/{TELEGRAM_TOKEN}"
+    await bot.set_webhook(webhook_url)
+    logging.info(f"Webhook установлен: {webhook_url}")
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    await on_startup()
+    # Запускаем фоновую задачу (она не мешает Flask)
+    asyncio.create_task(background_sender())
+
+if __name__ == "__main__":
+    # Запускаем Flask (он будет принимать сообщения от Телеграма)
+    port = int(os.environ.get("PORT", 10000))
+    # Запускаем бота в фоне, чтобы он мог отправлять сообщения
+    asyncio.run(main())
+    app.run(host='0.0.0.0', port=port)
 
 async def main():
     logging.basicConfig(level=logging.INFO)
