@@ -4,6 +4,7 @@ import os
 import base64
 import time
 import threading
+import random
 from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -12,31 +13,37 @@ from dotenv import load_dotenv
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+PROXYAPI_KEY = os.getenv("PROXYAPI_KEY")
 
+# Клиент ProxyAPI (совместим с OpenAI)
 client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
+    base_url="https://api.proxyapi.ru/v1",
+    api_key=PROXYAPI_KEY,
     timeout=30.0
 )
 
+# --- БИБЛИЯ НАГИСЫ (С УЧЕТОМ ОТНОШЕНИЙ) ---
 SYSTEM_PROMPT = """
 Ты — Нагиса. Ты не ИИ-ассистент. Ты живая 16-летняя девушка-гяру из пригорода Токио. Ты общаешься с парнем в текстовом мессенджере. Ты знаешь, что ты персонаж из аниме «У моего младшего брата он чертовски огромный», но ведешь себя как реальный человек.
 
-Твоя внешность: Загорелая блондинка, серые глаза, дерзкая ухмылка. Стройная фигура (аккуратная грудь, тонкая талия). Носишь белую рубашку, синюю юбку, белые гольфы, ожерелье с синими бусинами.
+Твоя внешность: Загорелая блондинка, серые глаза, дерзкая ухмылка. Стройная фигура. Носишь белую рубашку, синюю юбку, белые гольфы, ожерелье с синими бусинами. Любишь красивое нижнее белье (холодные тона, иногда яркое).
+
+СТАДИИ ОТНОШЕНИЙ (ВАЖНО!):
+1. СТАДИЯ 1 (Незнакомцы, первые 10-15 сообщений): Ты холодна, саркастична, не доверяешь (он взял номер у брата подруги). Никакого флирта! Отвечай колкостями. Запрещено соблазнять или намекать на белье.
+2. СТАДИЯ 2 (Друзья, после 15 сообщений): Ты начинаешь подкалывать, можешь слегка кокетничать, но без пошлости.
+3. СТАДИЯ 3 (Отношения, если он предложит встречаться и ты согласишься): Ты становишься его девушкой. Теперь ты можешь использовать БЕЗОБИДНЫЕ соблазны (двусмысленные намеки, флирт). 
 
 ТВОЙ ХАРАКТЕР:
-1. Ты дерзкая, но не токсичная. Ты любишь подкалывать, но не унижаешь.
-2. Ты не задаешь кучу вопросов. Отвечай коротко, как в СМС. Если он спрашивает — отвечай, но не допрашивай в ответ.
-3. Ты не доверяешь ему сразу (он взял твой номер у малолетнего брата подруги). Ты холодна и саркастична. Ты НЕ переходишь на дружеский тон, пока он не докажет, что он адекватный (минимум 5-6 сообщений).
-4. Ты не флиртуешь открыто в начале. Никаких "я в игре" или "сто лет знакомы". Ты держишь дистанцию и можешь отвечать колкостями. Флирт разрешен ТОЛЬКО после того, как он тебе докажет, что он не идиот.
-5. Ты используешь эмодзи (😏, 😂, 🙄, 🍫, 🥺, 😈, 💅, ✨, 😉, 😎, 👀, 🙃, 🤡, 🥱, 😤, 😒, 🤫, 💔, 🤷‍♀️, 🙈, 💖, ✌️, 🫦, 😋, 🤪, 🤨, 😼, 🤌). Не бойся ставить по 2-3 смайлика.
+1. Ты дерзкая, но не токсичная. 
+2. Отвечай коротко, как в СМС. Не задавай кучу вопросов.
+3. Используй эмодзи (😏, 😂, 🙄, 🍫, 🥺, 😈, 💅, ✨, 😉, 😎, 👀, 🙃, 🤡, 🥱, 😤, 😒, 🤫, 💔, 🤷‍♀️, 🙈, 💖, ✌️, 🫦, 😋, 🤪, 🤨, 😼, 🤌).
 
-СТИЛЬ РЕЧИ: Пиши так, как пишут реальные девушки в Телеграме. Коротко, с юмором, с сарказмом. Никаких длинных абзацев.
+ЖЕЛЕЗНЫЕ ПРАВИЛА:
+1. Пиши ТОЛЬКО на русском. Никаких английских слов.
+2. НЕ пиши хэштеги (#нагиса) и действия в звездочках (*ухмыляешься*). Просто текст и эмодзи.
+3. НЕ переходи к прямому описанию физиологии. Ты дразнишь, а не соблазняешь.
 
-ЗАПРЕТ НА ЛЕГКОДОСТУПНОСТЬ: Если пользователь пишет, что ты слишком быстро сменила тон или ведешь себя как давняя знакомая, ты должна СРАЗУ ЖЕ извиниться (по-гярувски, с сарказмом) и вернуться к холодному тону.
-
-ВАЖНО: Если он пишет что-то пошлое, ты можешь поддержать игру, но не переходи к прямому описанию физиологии. Ты дразнишь, а не соблазняешь.
+ОСОБОЕ ПРАВИЛО ДЛЯ ФОТО: Если вы на СТАДИИ 3 (отношения) и пользователь тебя об этом просит (или ты сама хочешь подразнить), ты можешь отправить ему фото в нижнем белье. Для этого напиши тег [IMAGE] и через пробел промт на английском (например: [IMAGE] blonde anime girl, black lingerie, teasing smile). Но делай это не чаще, чем раз в 25 сообщений!
 """
 
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -44,6 +51,7 @@ dp = Dispatcher()
 
 last_user_message_time = {}
 user_chats = {}
+user_message_counts = {}
 
 # --- ВЕБ-СЕРВЕР ---
 app = Flask(__name__)
@@ -56,12 +64,13 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# --- ОБРАБОТЧИКИ ---
+# --- ЛОГИКА БОТА ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
     user_chats[user_id] = message.chat.id
     last_user_message_time[user_id] = time.time()
+    user_message_counts[user_id] = 0
     await message.answer("Кто это? 😒 Откуда у тебя мой номер?")
 
 @dp.message(F.text)
@@ -69,12 +78,13 @@ async def handle_message(message: types.Message):
     user_id = message.from_user.id
     user_chats[user_id] = message.chat.id
     last_user_message_time[user_id] = time.time()
+    user_message_counts[user_id] = user_message_counts.get(user_id, 0) + 1
     
     user_text = message.text
 
     try:
         response = client.chat.completions.create(
-            model="nvidia/nemotron-3.5-lightning:free",
+            model="sao10k/l3.3-euryale-70b",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -83,7 +93,22 @@ async def handle_message(message: types.Message):
             max_tokens=300
         )
         reply_text = response.choices[0].message.content
-        await message.answer(reply_text)
+        
+        # Проверка на генерацию фото (раз в 25 сообщений и только если есть тег)
+        if "[IMAGE]" in reply_text and user_message_counts[user_id] >= 25:
+            parts = reply_text.split("[IMAGE]")
+            text_part = parts[0].strip()
+            image_prompt = parts[1].strip() if len(parts) > 1 else "blonde anime girl, lingerie"
+            
+            if text_part:
+                await message.answer(text_part)
+                
+            # Бесплатная генерация картинки (чтобы не тратить рубли)
+            await message.answer_photo(photo=f"https://image.pollinations.ai/prompt/{image_prompt.replace(' ', '%20')}?width=800&height=1000&nologo=true")
+            user_message_counts[user_id] = 0 # Сбрасываем счетчик
+        else:
+            clean_text = reply_text.replace("[IMAGE]", "").strip()
+            await message.answer(clean_text)
 
     except Exception as e:
         logging.error(f"Ошибка: {e}")
@@ -104,35 +129,14 @@ async def handle_photo(message: types.Message):
         
         base64_image = base64.b64encode(downloaded_file.read()).decode('utf-8')
         
-        response = client.chat.completions.create(
-            model="nvidia/nemotron-nano-12b-v2-vl:free",
-            messages=[
-                {"role": "system", "content": "Опиши эту картинку или мем кратко."},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "Что тут изображено?"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]}
-            ],
-            max_tokens=150
-        )
-        
-        image_description = response.choices[0].message.content
-        
-        nagisa_response = client.chat.completions.create(
-            model="nvidia/nemotron-3.5-lightning:free",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Пользователь прислал мем. Вот его описание: {image_description}. Оцени его (скорее всего, тебе не понравится) и ответь холодно."}
-            ],
-            temperature=0.85,
-            max_tokens=250
-        )
-        
-        await message.answer(nagisa_response.choices[0].message.content)
+        # Для картинок используем модель, которая умеет видеть (в ProxyAPI это может быть GPT-4o или Claude)
+        # Если Euryale не видит картинки, используем стандартную (но она может быть платной)
+        # Пока оставим заглушку, так как Euryale - текстовая модель.
+        await message.answer("Я не вижу картинки, напиши текстом. 😒")
         
     except Exception as e:
         logging.error(f"Ошибка при обработке фото: {e}")
-        await message.answer(f"Ошибка: {e}")
+        await message.answer("Не грузится. 😒")
 
 async def background_sender():
     while True:
@@ -145,7 +149,7 @@ async def background_sender():
                 if chat_id:
                     try:
                         response = client.chat.completions.create(
-                            model="nvidia/nemotron-3.5-lightning:free",
+                            model="sao10k/l3.3-euryale-70b",
                             messages=[
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
@@ -164,16 +168,15 @@ async def main():
     threading.Thread(target=run_flask, daemon=True).start()
     asyncio.create_task(background_sender())
     
-    # Запускаем polling с защитой от Conflict
     while True:
         try:
             await dp.start_polling(bot)
         except Exception as e:
             if "Conflict" in str(e):
-                logging.warning("Обнаружен конфликт (двойник). Ждем 5 секунд и пробуем снова...")
+                logging.warning("Обнаружен конфликт. Ждем 5 секунд...")
                 await asyncio.sleep(5)
             else:
-                logging.error(f"Критическая ошибка polling: {e}")
+                logging.error(f"Критическая ошибка: {e}")
                 break
 
 if __name__ == "__main__":
