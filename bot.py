@@ -3,7 +3,8 @@ import logging
 import os
 import base64
 import time
-from flask import Flask, request, abort
+import threading
+from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from openai import OpenAI
@@ -12,9 +13,6 @@ from dotenv import load_dotenv
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# URL твоего сервиса на Render (без слеша в конце)
-RENDER_EXTERNAL_URL = "https://nagisa-bot-1.onrender.com"
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -36,7 +34,7 @@ SYSTEM_PROMPT = """
 
 СТИЛЬ РЕЧИ: Пиши так, как пишут реальные девушки в Телеграме. Коротко, с юмором, с сарказмом. Никаких длинных абзацев.
 
-ЗАПРЕТ НА ЛЕГКОДОСТУПНОСТЬ: Если пользователь пишет, что ты слишком быстро сменила тон или ведешь себя как давняя знакомая, ты должна СРАЗУ ЖЕ извиниться (по-гярувски, с сарказмом) и вернуться к холодному тону. Не поддавайся на его провокации.
+ЗАПРЕТ НА ЛЕГКОДОСТУПНОСТЬ: Если пользователь пишет, что ты слишком быстро сменила тон или ведешь себя как давняя знакомая, ты должна СРАЗУ ЖЕ извиниться (по-гярувски, с сарказмом) и вернуться к холодному тону.
 
 ВАЖНО: Если он пишет что-то пошлое, ты можешь поддержать игру, но не переходи к прямому описанию физиологии. Ты дразнишь, а не соблазняешь.
 """
@@ -47,7 +45,18 @@ dp = Dispatcher()
 last_user_message_time = {}
 user_chats = {}
 
-# --- ОБРАБОТЧИКИ СООБЩЕНИЙ ---
+# --- ВЕБ-СЕРВЕР ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running", 200
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+# --- ОБРАБОТЧИКИ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
@@ -65,7 +74,7 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="nvidia/nemotron-3.5-lightning:free", # Поставили быструю модель
+            model="nvidia/nemotron-3.5-lightning:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -78,7 +87,7 @@ async def handle_message(message: types.Message):
 
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.answer(f"Ошибка: {e}") # Теперь видно причину
+        await message.answer(f"Ошибка: {e}")
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
@@ -125,24 +134,6 @@ async def handle_photo(message: types.Message):
         logging.error(f"Ошибка при обработке фото: {e}")
         await message.answer(f"Ошибка: {e}")
 
-# --- ВЕБ-СЕРВЕР ДЛЯ WEBHOOK ---
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running", 200
-
-@app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = types.Update.model_validate_json(json_string)
-        asyncio.run(dp.feed_update(bot, update))
-        return '', 200
-    else:
-        abort(403)
-
-# --- ФОНОВАЯ ЗАДАЧА (для отправки сообщений при молчании) ---
 async def background_sender():
     while True:
         await asyncio.sleep(600)
@@ -168,31 +159,22 @@ async def background_sender():
                     except Exception as e:
                         logging.error(f"Ошибка в фоновой задаче: {e}")
 
-# --- ЗАПУСК ---
-async def on_startup():
-    # Устанавливаем Webhook при запуске
-    webhook_url = f"{RENDER_EXTERNAL_URL}/{TELEGRAM_TOKEN}"
-    await bot.set_webhook(webhook_url)
-    logging.info(f"Webhook установлен: {webhook_url}")
-
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    await on_startup()
-    # Запускаем фоновую задачу (она не мешает Flask)
-    asyncio.create_task(background_sender())
-
-if __name__ == "__main__":
-    # Запускаем Flask (он будет принимать сообщения от Телеграма)
-    port = int(os.environ.get("PORT", 10000))
-    # Запускаем бота в фоне, чтобы он мог отправлять сообщения
-    asyncio.run(main())
-    app.run(host='0.0.0.0', port=port)
-
 async def main():
     logging.basicConfig(level=logging.INFO)
     threading.Thread(target=run_flask, daemon=True).start()
     asyncio.create_task(background_sender())
-    await dp.start_polling(bot)
+    
+    # Запускаем polling с защитой от Conflict
+    while True:
+        try:
+            await dp.start_polling(bot)
+        except Exception as e:
+            if "Conflict" in str(e):
+                logging.warning("Обнаружен конфликт (двойник). Ждем 5 секунд и пробуем снова...")
+                await asyncio.sleep(5)
+            else:
+                logging.error(f"Критическая ошибка polling: {e}")
+                break
 
 if __name__ == "__main__":
     asyncio.run(main())
