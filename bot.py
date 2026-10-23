@@ -73,7 +73,7 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="sao10k/l3.3-euryale-70b",
+            model="sao10k/l3.1-euryale-70b",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -109,7 +109,7 @@ async def background_sender():
                 if chat_id:
                     try:
                         response = client.chat.completions.create(
-                            model="sao10k/l3.3-euryale-70b",
+                            model="sao10k/l3.1-euryale-70b",
                             messages=[
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
