@@ -14,10 +14,11 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# Добавили timeout, чтобы избежать обрывов связи
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
-    timeout=30.0  # Ждем ответа до 30 секунд, чтобы модель не обрывалась
+    timeout=30.0 
 )
 
 SYSTEM_PROMPT = """
@@ -34,6 +35,8 @@ SYSTEM_PROMPT = """
 
 СТИЛЬ РЕЧИ: Пиши так, как пишут реальные девушки в Телеграме. Коротко, с юмором, с сарказмом. Никаких длинных абзацев.
 
+ЖЕЛЕЗНОЕ ПРАВИЛО: Пиши ТОЛЬКО на русском языке. Не используй английские слова (никаких "complete idiot", "sorry" и т.д.), если это не сленг гяру. Всегда дописывай свои сообщения до конца, не обрывай мысль на полуслове.
+
 ВАЖНО: Если он пишет что-то пошлое, ты можешь поддержать игру, но не переходи к прямому описанию физиологии. Ты дразнишь, а не соблазняешь.
 """
 
@@ -43,7 +46,7 @@ dp = Dispatcher()
 last_user_message_time = {}
 user_chats = {}
 
-# --- ВЕБ-СЕРВЕР ДЛЯ RENDER (заглушка) ---
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -58,7 +61,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# --- ЛОГИКА БОТА (без изменений) ---
+# --- ЛОГИКА БОТА ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
@@ -76,7 +79,7 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="nvidia/nemotron-3.5-lightning:free",
+            model="cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -106,6 +109,7 @@ async def handle_photo(message: types.Message):
         
         base64_image = base64.b64encode(downloaded_file.read()).decode('utf-8')
         
+        # Зрячая модель для описания (оставляем Nemotron, если он работает, или можно заменить на другую)
         response = client.chat.completions.create(
             model="nvidia/nemotron-nano-12b-v2-vl:free",
             messages=[
@@ -121,7 +125,7 @@ async def handle_photo(message: types.Message):
         image_description = response.choices[0].message.content
         
         nagisa_response = client.chat.completions.create(
-          model="nvidia/nemotron-3.5-lightning:free",
+            model="cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Пользователь прислал мем. Вот его описание: {image_description}. Оцени его (скорее всего, тебе не понравится) и ответь холодно."}
@@ -147,7 +151,7 @@ async def background_sender():
                 if chat_id:
                     try:
                         response = client.chat.completions.create(
-                            model="nvidia/nemotron-3.5-lightning:free",
+                            model="cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
                             messages=[
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
@@ -163,11 +167,8 @@ async def background_sender():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    # Запускаем Flask в отдельном потоке
     threading.Thread(target=run_flask, daemon=True).start()
-    # Запускаем фоновую задачу
     asyncio.create_task(background_sender())
-    # Запускаем бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
