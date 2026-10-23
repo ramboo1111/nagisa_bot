@@ -17,7 +17,7 @@ PROXYAPI_KEY = "sk-6dKDlOMPUA8uwPgSUFaRKJLE1DR4IO27"
 
 # Клиент ProxyAPI (совместим с OpenAI)
 client = OpenAI(
-    base_url="https://api.proxyapi.ru/v1",
+    base_url="https://openai.api.proxyapi.ru/v1",
     api_key=PROXYAPI_KEY,
     timeout=30.0
 )
