@@ -64,12 +64,12 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="sao10k/l3.1-euryale-70b", # Наша любимая Euryale
+           model="sao10k/l3.1-euryale-70b",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
             ],
-            temperature=0.85,
+           temperature=0.7,
             max_tokens=400
         )
         reply_text = response.choices[0].message.content
