@@ -76,7 +76,7 @@ async def handle_message(message: types.Message):
 
     try:
         response = client.chat.completions.create(
-            model="google/gemma-4-31b-it:free",
+            model="nvidia/nemotron-3-super-120b-a12b:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_text}
@@ -121,7 +121,7 @@ async def handle_photo(message: types.Message):
         image_description = response.choices[0].message.content
         
         nagisa_response = client.chat.completions.create(
-          model="google/gemma-4-31b-it:free",
+          model="nvidia/nemotron-3-super-120b-a12b:free",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Пользователь прислал мем. Вот его описание: {image_description}. Оцени его (скорее всего, тебе не понравится) и ответь холодно."}
@@ -147,7 +147,7 @@ async def background_sender():
                 if chat_id:
                     try:
                         response = client.chat.completions.create(
-                            model="google/gemma-4-31b-it:free",
+                            model="nvidia/nemotron-3-super-120b-a12b:free",
                             messages=[
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": "Пользователь давно тебе не писал (больше часа). Напиши ему первое сообщение. Это должно быть что-то короткое, в твоем стиле."}
