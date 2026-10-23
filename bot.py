@@ -14,7 +14,7 @@ PROXYAPI_KEY = "sk-6dKDlOMPUA8uwPgSUFaRKJLE1DR4IO27"
 RENDER_EXTERNAL_URL = "https://nagisa-bot-1.onrender.com" # Твой URL
 
 client = OpenAI(
-    base_url="https://openai.api.proxyapi.ru/v1", # Правильный адрес для всех моделей
+    base_url="https://api.proxyapi.ru/v1", # Правильный адрес для всех моделей
     api_key=PROXYAPI_KEY,
     timeout=30.0
 )
